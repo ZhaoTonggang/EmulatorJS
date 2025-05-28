@@ -80,7 +80,6 @@ class EmulatorJS {
             element.addEventListener(listeners[i], callback);
             const data = { cb: callback, elem: element, listener: listeners[i] };
             rv.push(data);
-            this.listeners.push(data);
         }
         return rv;
     }
@@ -200,7 +199,7 @@ class EmulatorJS {
         return parseInt(rv.join(""));
     }
     constructor(element, config) {
-        this.ejs_version = "4.2.1";
+        this.ejs_version = "4.2.2-beta";
         this.extensions = [];
         this.initControlVars();
         this.debug = (window.EJS_DEBUG_XX === true);
@@ -221,7 +220,6 @@ class EmulatorJS {
         if (this.config.defaultControllers) this.defaultControllers = this.config.defaultControllers;
         this.muted = false;
         this.paused = true;
-        this.listeners = [];
         this.missingLang = [];
         this.setElements(element);
         this.setColor(this.config.color || "");
@@ -235,6 +233,20 @@ class EmulatorJS {
             let check = false;
             (function (a) { if (/(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino|android|ipad|playbook|silk/i.test(a) || /1207|6310|6590|3gso|4thp|50[1-6]i|770s|802s|a wa|abac|ac(er|oo|s\-)|ai(ko|rn)|al(av|ca|co)|amoi|an(ex|ny|yw)|aptu|ar(ch|go)|as(te|us)|attw|au(di|\-m|r |s )|avan|be(ck|ll|nq)|bi(lb|rd)|bl(ac|az)|br(e|v)w|bumb|bw\-(n|u)|c55\/|capi|ccwa|cdm\-|cell|chtm|cldc|cmd\-|co(mp|nd)|craw|da(it|ll|ng)|dbte|dc\-s|devi|dica|dmob|do(c|p)o|ds(12|\-d)|el(49|ai)|em(l2|ul)|er(ic|k0)|esl8|ez([4-7]0|os|wa|ze)|fetc|fly(\-|_)|g1 u|g560|gene|gf\-5|g\-mo|go(\.w|od)|gr(ad|un)|haie|hcit|hd\-(m|p|t)|hei\-|hi(pt|ta)|hp( i|ip)|hs\-c|ht(c(\-| |_|a|g|p|s|t)|tp)|hu(aw|tc)|i\-(20|go|ma)|i230|iac( |\-|\/)|ibro|idea|ig01|ikom|im1k|inno|ipaq|iris|ja(t|v)a|jbro|jemu|jigs|kddi|keji|kgt( |\/)|klon|kpt |kwc\-|kyo(c|k)|le(no|xi)|lg( g|\/(k|l|u)|50|54|\-[a-w])|libw|lynx|m1\-w|m3ga|m50\/|ma(te|ui|xo)|mc(01|21|ca)|m\-cr|me(rc|ri)|mi(o8|oa|ts)|mmef|mo(01|02|bi|de|do|t(\-| |o|v)|zz)|mt(50|p1|v )|mwbp|mywa|n10[0-2]|n20[2-3]|n30(0|2)|n50(0|2|5)|n7(0(0|1)|10)|ne((c|m)\-|on|tf|wf|wg|wt)|nok(6|i)|nzph|o2im|op(ti|wv)|oran|owg1|p800|pan(a|d|t)|pdxg|pg(13|\-([1-8]|c))|phil|pire|pl(ay|uc)|pn\-2|po(ck|rt|se)|prox|psio|pt\-g|qa\-a|qc(07|12|21|32|60|\-[2-7]|i\-)|qtek|r380|r600|raks|rim9|ro(ve|zo)|s55\/|sa(ge|ma|mm|ms|ny|va)|sc(01|h\-|oo|p\-)|sdk\/|se(c(\-|0|1)|47|mc|nd|ri)|sgh\-|shar|sie(\-|m)|sk\-0|sl(45|id)|sm(al|ar|b3|it|t5)|so(ft|ny)|sp(01|h\-|v\-|v )|sy(01|mb)|t2(18|50)|t6(00|10|18)|ta(gt|lk)|tcl\-|tdg\-|tel(i|m)|tim\-|t\-mo|to(pl|sh)|ts(70|m\-|m3|m5)|tx\-9|up(\.b|g1|si)|utst|v400|v750|veri|vi(rg|te)|vk(40|5[0-3]|\-v)|vm40|voda|vulc|vx(52|53|60|61|70|80|81|83|85|98)|w3c(\-| )|webc|whit|wi(g |nc|nw)|wmlb|wonu|x700|yas\-|your|zeto|zte\-/i.test(a.substr(0, 4))) check = true; })(navigator.userAgent || navigator.vendor || window.opera);
             return check;
+        })();
+        this.hasTouchScreen = (function() {
+            if (window.PointerEvent && ('maxTouchPoints' in navigator)) {
+                if (navigator.maxTouchPoints > 0) {
+                    return true;
+                }
+            } else {
+                if (window.matchMedia && window.matchMedia("(any-pointer:coarse)").matches) {
+                    return true;
+                } else if (window.TouchEvent || ('ontouchstart' in window)) {
+                    return true;
+                }
+            }
+            return false;
         })();
         this.canvas = this.createElement('canvas');
         this.canvas.classList.add('ejs_canvas');
@@ -919,6 +931,7 @@ class EmulatorJS {
             preRun: [],
             postRun: [],
             canvas: this.canvas,
+            parent: this.elements.parent,
             print: (msg) => {
                 if (this.debug) {
                     console.log(msg);
@@ -1114,13 +1127,20 @@ class EmulatorJS {
             if (!this.gamepadLabels) return;
             for (let i = 0; i < this.gamepadSelection.length; i++) {
                 if (this.gamepadSelection[i] === "") {
-                    this.gamepadSelection[i] = this.gamepad.gamepads[e.gamepadIndex].id;
+                    this.gamepadSelection[i] = this.gamepad.gamepads[e.gamepadIndex].id + "_" + this.gamepad.gamepads[e.gamepadIndex].index;
                     break;
                 }
             }
             this.updateGamepadLabels();
         })
         this.gamepad.on('disconnected', (e) => {
+            const gamepadIndex = this.gamepad.gamepads.indexOf(this.gamepad.gamepads.find(f => f.index == e.gamepadIndex));
+            const gamepadSelection = this.gamepad.gamepads[gamepadIndex].id + "_" + this.gamepad.gamepads[gamepadIndex].index;
+            for (let i = 0; i < this.gamepadSelection.length; i++) {
+                if (this.gamepadSelection[i] === gamepadSelection) {
+                    this.gamepadSelection[i] = "";
+                }
+            }
             setTimeout(this.updateGamepadLabels.bind(this), 10);
         })
         this.gamepad.on('axischanged', this.gamepadEvent.bind(this));
@@ -1148,8 +1168,8 @@ class EmulatorJS {
             this.gamepadLabels[i].appendChild(def);
             for (let j = 0; j < this.gamepad.gamepads.length; j++) {
                 const opt = this.createElement("option");
-                opt.setAttribute("value", this.gamepad.gamepads[j].id);
-                opt.innerText = this.gamepad.gamepads[j].id;
+                opt.setAttribute("value", this.gamepad.gamepads[j].id + "_" + this.gamepad.gamepads[j].index);
+                opt.innerText = this.gamepad.gamepads[j].id + "_" + this.gamepad.gamepads[j].index;
                 this.gamepadLabels[i].appendChild(opt);
             }
             this.gamepadLabels[i].value = this.gamepadSelection[i] || "notconnected";
@@ -1367,7 +1387,7 @@ class EmulatorJS {
         }
         this.addEventListener(this.elements.contextmenu, 'contextmenu', (e) => e.preventDefault());
         this.addEventListener(this.elements.parent, 'contextmenu', (e) => e.preventDefault());
-        this.addEventListener(this.game, 'mousedown', hideMenu);
+        this.addEventListener(this.game, 'mousedown touchend', hideMenu);
         const parent = this.createElement("ul");
         const addButton = (title, hidden, functi0n) => {
             //<li><a href="#" onclick="return false">'+title+'</a></li>
@@ -1658,14 +1678,12 @@ class EmulatorJS {
             this.elements.menu.classList.add("ejs_menu_bar_hidden");
         }
 
-        this.addEventListener(this.elements.parent, 'mousemove click', (e) => {
-            if (e.pointerType === "touch") return;
-            if (!this.started || ignoreEvents || document.pointerLockElement === this.canvas) return;
-            if (this.isPopupOpen()) return;
+        const show = () => {
             clearTimeout(timeout);
             timeout = setTimeout(hide, 3000);
             this.elements.menu.classList.remove("ejs_menu_bar_hidden");
-        })
+        }
+
         this.menu = {
             close: () => {
                 clearTimeout(timeout);
@@ -1686,6 +1704,43 @@ class EmulatorJS {
                 this.elements.menu.classList.toggle("ejs_menu_bar_hidden");
             }
         }
+
+        this.createBottomMenuBarListeners = () => {
+            const clickListener = (e) => {
+                if (e.pointerType === "touch") return;
+                if (!this.started || ignoreEvents || document.pointerLockElement === this.canvas) return;
+                if (this.isPopupOpen()) return;
+                show();
+            }
+            const mouseListener = (e) => {
+                if (!this.started || ignoreEvents || document.pointerLockElement === this.canvas) return;
+                if (this.isPopupOpen()) return;
+                const deltaX = e.movementX;
+                const deltaY = e.movementY;
+                const threshold = this.elements.menu.offsetHeight + 30;
+                const mouseY = e.clientY;
+
+                if (mouseY >= window.innerHeight - threshold) {
+                    show();
+                    return;
+                }
+                let angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
+                if (angle < 0) angle += 360;
+                if (angle < 85 || angle > 95) return;
+                show();
+            }
+            if (this.menu.mousemoveListener) this.removeEventListener(this.menu.mousemoveListener);
+            
+            if ((this.preGetSetting("menubarBehavior") || "downward") === "downward") {
+                this.menu.mousemoveListener = this.addEventListener(this.elements.parent, "mousemove", mouseListener);
+            } else {
+                this.menu.mousemoveListener = this.addEventListener(this.elements.parent, "mousemove", clickListener);
+            }
+
+            this.addEventListener(this.elements.parent, "click", clickListener);
+        }
+        this.createBottomMenuBarListeners();
+
         this.elements.parent.appendChild(this.elements.menu);
 
         let tmout;
@@ -2779,7 +2834,7 @@ class EmulatorJS {
             playerTitle.appendChild(leftPadding);
             playerTitle.appendChild(aboutParent);
 
-            if ((this.touch || navigator.maxTouchPoints > 0) && i === 0) {
+            if ((this.touch || this.hasTouchScreen) && i === 0) {
                 const vgp = this.createElement("div");
                 vgp.style = "width:25%;float:right;clear:none;padding:0;font-size: 11px;padding-left: 2.25rem;";
                 vgp.classList.add("ejs_control_row");
@@ -3234,7 +3289,7 @@ class EmulatorJS {
     }
     gamepadEvent(e) {
         if (!this.started) return;
-        const gamepadIndex = this.gamepadSelection.indexOf(this.gamepad.gamepads[e.gamepadIndex].id);
+        const gamepadIndex = this.gamepadSelection.indexOf(this.gamepad.gamepads[e.gamepadIndex].id + "_" + this.gamepad.gamepads[e.gamepadIndex].index);
         if (gamepadIndex < 0) {
             return; // Gamepad not set anywhere
         }
@@ -3409,15 +3464,15 @@ class EmulatorJS {
                 { "type": "button", "text": "B", "id": "b", "location": "right", "left": -10, "top": 95, "input_value": 1, "bold": true },
                 { "type": "button", "text": "A", "id": "a", "location": "right", "left": 40, "top": 150, "input_value": 0, "bold": true },
                 { "type": "zone", "id": "stick", "location": "left", "left": "50%", "top": "100%", "joystickInput": true, "inputValues": [16, 17, 18, 19] },
-                { "type": "zone", "id": "dpad", "location": "left", "left": "50%", "top": "0%", "joystickInput": true, "inputValues": [20, 21, 22, 23] },
+                { "type": "zone", "id": "dpad", "location": "left", "left": "50%", "top": "0%", "joystickInput": false, "inputValues": [4, 5, 6, 7] },
                 { "type": "button", "text": "Start", "id": "start", "location": "center", "left": 30, "top": -10, "fontSize": 15, "block": true, "input_value": 3 },
                 { "type": "button", "text": "L", "id": "l", "block": true, "location": "top", "left": 10, "top": -40, "bold": true, "input_value": 10 },
                 { "type": "button", "text": "R", "id": "r", "block": true, "location": "top", "right": 10, "top": -40, "bold": true, "input_value": 11 },
                 { "type": "button", "text": "Z", "id": "z", "block": true, "location": "top", "left": 10, "bold": true, "input_value": 12 },
-                { "fontSize": 20, "type": "button", "text": "CU", "id": "cu", "location": "right", "left": 25, "top": -65, "input_value": 23 },
-                { "fontSize": 20, "type": "button", "text": "CD", "id": "cd", "location": "right", "left": 25, "top": 15, "input_value": 22 },
-                { "fontSize": 20, "type": "button", "text": "CL", "id": "cl", "location": "right", "left": -15, "top": -25, "input_value": 21 },
-                { "fontSize": 20, "type": "button", "text": "CR", "id": "cr", "location": "right", "left": 65, "top": -25, "input_value": 20 }
+                { "fontSize": 20, "type": "button", "text": "CU", "id": "cu", "joystickInput": true, "location": "right", "left": 25, "top": -65, "input_value": 23 },
+                { "fontSize": 20, "type": "button", "text": "CD", "id": "cd", "joystickInput": true, "location": "right", "left": 25, "top": 15, "input_value": 22 },
+                { "fontSize": 20, "type": "button", "text": "CL", "id": "cl", "joystickInput": true, "location": "right", "left": -15, "top": -25, "input_value": 21 },
+                { "fontSize": 20, "type": "button", "text": "CR", "id": "cr", "joystickInput": true, "location": "right", "left": 65, "top": -25, "input_value": 20 }
             ];
             info.push(...speedControlButtons);
         } else if ("nds" === this.getControlScheme()) {
@@ -3683,6 +3738,7 @@ class EmulatorJS {
                 }
                 elems[info[i].location].appendChild(button);
                 const value = info[i].input_new_cores || info[i].input_value;
+                let downValue = info[i].joystickInput === true ? 0x7fff : 1;
                 this.addEventListener(button, "touchstart touchend touchcancel", (e) => {
                     e.preventDefault();
                     if (e.type === 'touchend' || e.type === 'touchcancel') {
@@ -3692,7 +3748,7 @@ class EmulatorJS {
                         })
                     } else {
                         e.target.classList.add("ejs_virtualGamepad_button_down");
-                        this.gameManager.simulateInput(0, value, 1);
+                        this.gameManager.simulateInput(0, value, downValue);
                     }
                 })
             }
@@ -3948,12 +4004,18 @@ class EmulatorJS {
             });
         })
 
-        if (this.touch || navigator.maxTouchPoints > 0) {
+        if (this.touch || this.hasTouchScreen) {
             const menuButton = this.createElement("div");
             menuButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M0 96C0 78.33 14.33 64 32 64H416C433.7 64 448 78.33 448 96C448 113.7 433.7 128 416 128H32C14.33 128 0 113.7 0 96zM0 256C0 238.3 14.33 224 32 224H416C433.7 224 448 238.3 448 256C448 273.7 433.7 288 416 288H32C14.33 288 0 273.7 0 256zM416 448H32C14.33 448 0 433.7 0 416C0 398.3 14.33 384 32 384H416C433.7 384 448 398.3 448 416C448 433.7 433.7 448 416 448z"/></svg>';
             menuButton.classList.add("ejs_virtualGamepad_open");
             menuButton.style.display = "none";
-            this.on("start", () => menuButton.style.display = "");
+            this.on("start", () => {
+                menuButton.style.display = "";
+                if (matchMedia('(pointer:fine)').matches && this.preGetSetting("menu-bar-button") !== "visible") {
+                    menuButton.style.opacity = 0;
+                    this.changeSettingOption('menu-bar-button', 'hidden');
+                }
+            });
             this.elements.parent.appendChild(menuButton);
             let timeout;
             let ready = true;
@@ -4105,6 +4167,9 @@ class EmulatorJS {
             this.gameManager.setCurrentDisk(value);
         } else if (option === "virtual-gamepad") {
             this.toggleVirtualGamepad(value !== "disabled");
+        } else if (option === "menu-bar-button") {
+            this.elements.menuToggle.style.display = "";
+            this.elements.menuToggle.style.opacity = value === "visible" ? 0.5 : 0;
         } else if (option === "virtual-gamepad-left-handed-mode") {
             this.toggleVirtualGamepadLeftHanded(value !== "disabled");
         } else if (option === "ff-ratio") {
@@ -4167,6 +4232,8 @@ class EmulatorJS {
             this.saveSaveInterval = setInterval(() => {
                 if (this.started) this.gameManager.saveSaveFiles();
             }, value * 1000);
+        } else if (option === "menubarBehavior") {
+            this.createBottomMenuBarListeners();
         }
     }
     menuOptionChanged(option, value) {
@@ -4701,6 +4768,13 @@ class EmulatorJS {
             ], '6', speedOptions, true);
         }
 
+        const mouseOptions = createSettingParent(true, "Mouse Options", home);
+
+        addToMenu(this.localization("Menubar Visibility Behavior"), "menubarBehavior", {
+            "downward": this.localization("Downward Movment"),
+            "anywhere": this.localization("Movment Anywhere"),
+        }, "downward", mouseOptions, true);
+
         if (this.saveInBrowserSupported()) {
             const saveStateOpts = createSettingParent(true, "Save States", home);
             addToMenu(this.localization('Save State Slot'), 'save-state-slot', ["1", "2", "3", "4", "5", "6", "7", "8", "9"], "1", saveStateOpts, true);
@@ -4720,12 +4794,16 @@ class EmulatorJS {
             checkForEmptyMenu(saveStateOpts);
         }
 
-        if (this.touch || navigator.maxTouchPoints > 0) {
+        if (this.touch || this.hasTouchScreen) {
             const virtualGamepad = createSettingParent(true, "Virtual Gamepad", home);
             addToMenu(this.localization('Virtual Gamepad'), 'virtual-gamepad', {
                 'enabled': this.localization("Enabled"),
                 'disabled': this.localization("Disabled")
             }, this.isMobile ? 'enabled' : 'disabled', virtualGamepad, true);
+            addToMenu(this.localization('Menu Bar Button'), 'menu-bar-button', {
+                'visible': this.localization("visible"),
+                'hidden': this.localization("hidden")
+            }, 'visible', virtualGamepad, true);
             addToMenu(this.localization('Left Handed Mode'), 'virtual-gamepad-left-handed-mode', {
                 'enabled': this.localization("Enabled"),
                 'disabled': this.localization("Disabled")
