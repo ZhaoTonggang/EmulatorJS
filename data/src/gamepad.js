@@ -65,7 +65,9 @@ class GamepadHandler {
                     const newVal = (gamepad.axes[axisIndex] < 0.01 && gamepad.axes[axisIndex] > -0.01) ? 0 : gamepad.axes[axisIndex];
                     if (newVal !== val) {
                         const axis = ['LEFT_STICK_X', 'LEFT_STICK_Y', 'RIGHT_STICK_X', 'RIGHT_STICK_Y'][axisIndex];
-                        if (!axis) return;
+                        if (!axis) {
+                            axis = "EXTRA_STICK_" + axisIndex;
+                        }
                         this.dispatchEvent('axischanged', {
                             axis: axis,
                             value: newVal,
@@ -100,6 +102,12 @@ class GamepadHandler {
             })
             if (!hasGamepad) {
                 this.gamepads.push(gamepads[index]);
+                this.gamepads.sort((a, b) => {
+                    if (a == null && b == null) return 0;
+                    if (a == null) return 1;
+                    if (b == null) return -1;
+                    return a.index - b.index;
+                });
                 this.dispatchEvent('connected', {gamepadIndex: gamepad.index});
             }
         });
